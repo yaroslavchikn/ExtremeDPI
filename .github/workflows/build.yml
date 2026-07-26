@@ -23,11 +23,15 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Generate debug keystore
+        run: |
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=US"
+
       - name: Build with Gradle
         uses: gradle/gradle-build-action@v3
         with:
           arguments: assembleRelease
-          gradle-version: 8.2   # <-- Явно указываем версию Gradle
+          gradle-version: 8.2
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
