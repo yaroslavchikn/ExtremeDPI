@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace 'com.example.byedpiwifi'   // <-- добавлено
+    namespace 'com.example.byedpiwifi'
     compileSdk 33
 
     defaultConfig {
@@ -15,10 +15,28 @@ android {
         versionName "1.0"
     }
 
+    signingConfigs {
+        debug {
+            // Используем стандартный debug keystore
+            storeFile file("$rootDir/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+        release {
+            // Для релиза используем debug подпись (для простоты)
+            storeFile file("$rootDir/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release   // <-- подписываем релиз
         }
     }
 
