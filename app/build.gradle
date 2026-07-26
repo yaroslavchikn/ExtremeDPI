@@ -4,6 +4,7 @@ plugins {
 }
 
 android {
+    namespace 'com.example.byedpiwifi'   // <-- добавлено
     compileSdk 33
 
     defaultConfig {
@@ -36,6 +37,5 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.8.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    // Корутины для асинхронной обработки потоков
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
 }
