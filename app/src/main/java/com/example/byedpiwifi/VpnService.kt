@@ -34,7 +34,6 @@ class VpnService : VpnService() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val running = AtomicBoolean(false)
 
-    // -------------------- Жизненный цикл --------------------
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -54,7 +53,6 @@ class VpnService : VpnService() {
         super.onDestroy()
     }
 
-    // -------------------- VPN интерфейс --------------------
     private fun startVpn() {
         try {
             val builder = Builder()
@@ -83,7 +81,6 @@ class VpnService : VpnService() {
         stopForeground(true)
     }
 
-    // -------------------- Чтение пакетов --------------------
     private suspend fun readPackets() {
         val fd = vpnInterface?.fileDescriptor ?: return
         val inputStream = FileInputStream(fd)
@@ -106,7 +103,6 @@ class VpnService : VpnService() {
         }
     }
 
-    // -------------------- Обработка пакета --------------------
     private fun processPacket(packetData: ByteArray, outputStream: FileOutputStream) {
         if (packetData.size < 20) return
         val buffer = ByteBuffer.wrap(packetData)
@@ -131,7 +127,6 @@ class VpnService : VpnService() {
         }
     }
 
-    // -------------------- TCP обработка --------------------
     private fun handleTcp(packetData: ByteArray, ipHeaderLen: Int, srcIp: Int, dstIp: Int, outputStream: FileOutputStream) {
         val tcpOffset = ipHeaderLen
         if (packetData.size < tcpOffset + 20) return
@@ -159,7 +154,6 @@ class VpnService : VpnService() {
         val reverseKey = "$dstIp:$dstPort->$srcIp:$srcPort"
 
         if (syn && !ackFlag) {
-            // Новое соединение
             val conn = Connection(srcIp, srcPort, dstIp, dstPort, outputStream, seq, ack)
             connections[key] = conn
             conn.connect()
@@ -169,7 +163,6 @@ class VpnService : VpnService() {
             connections.remove(reverseKey)?.close()
             Log.d(TAG, "Закрытие соединения $key")
         } else if (dataLen > 0) {
-            // Данные от клиента
             val conn = connections[key]
             if (conn != null && conn.connected) {
                 val data = ByteArray(dataLen)
@@ -177,16 +170,13 @@ class VpnService : VpnService() {
                 buffer.get(data)
                 conn.sendToServer(data)
             } else {
-                // Если соединение не найдено, возможно это ответ от сервера – игнорируем (ответы отправляются отдельно)
                 Log.d(TAG, "Данные от сервера или потерянное соединение")
             }
         }
-        // ACK без данных игнорируем
     }
 
-    // -------------------- UDP (заглушка) --------------------
     private fun handleUdp(packetData: ByteArray, ipHeaderLen: Int, srcIp: Int, dstIp: Int, outputStream: FileOutputStream) {
-        // Для простоты пропускаем
+        // UDP не обрабатывается для простоты
         Log.d(TAG, "UDP пакет получен, пропущен")
     }
 
@@ -194,7 +184,6 @@ class VpnService : VpnService() {
         return ((packet[2].toInt() and 0xFF) shl 8) or (packet[3].toInt() and 0xFF)
     }
 
-    // -------------------- Внутренний класс Connection --------------------
     inner class Connection(
         val srcIp: Int, val srcPort: Int,
         val dstIp: Int, val dstPort: Int,
@@ -228,7 +217,6 @@ class VpnService : VpnService() {
             }
         }
 
-        // Чтение ответов от сервера и отправка клиенту
         private suspend fun readFromServer() {
             val buffer = ByteArray(65535)
             while (connected && running.get()) {
@@ -246,7 +234,6 @@ class VpnService : VpnService() {
             close()
         }
 
-        // Отправка данных клиенту (сборка полноценного IP-пакета)
         private fun sendPacketToClient(data: ByteArray) {
             val ipLen = 20
             val tcpLen = 20
@@ -254,58 +241,53 @@ class VpnService : VpnService() {
             val packet = ByteBuffer.allocate(totalLen)
             packet.order(ByteOrder.BIG_ENDIAN)
 
-            // ----- IP-заголовок -----
-            packet.put(0x45) // Version, IHL
-            packet.put(0x00) // DSCP, ECN
-            packet.putShort(totalLen.toShort())
-            packet.putShort(0x1234) // ID
-            packet.putShort(0x4000) // Flags (DF)
-            packet.put(64) // TTL
-            packet.put(6) // Protocol TCP
-            // Checksum (пока 0)
-            packet.putShort(0)
-            packet.putInt(dstIp) // Source IP (обратный)
-            packet.putInt(srcIp) // Destination IP
+            // IP-заголовок
+            packet.put(0x45)
+            packet.put(0x00)
+            packet.putShort(totalLen.toShort())                 // total length
+            packet.putShort(0x1234.toShort())                  // ID
+            packet.putShort(0x4000.toShort())                  // Flags (DF)
+            packet.put(64)                                      // TTL
+            packet.put(6)                                       // Protocol TCP
+            packet.putShort(0)                                  // checksum placeholder
+            packet.putInt(dstIp)                                // Source IP (обратный)
+            packet.putInt(srcIp)                                // Destination IP
 
-            // ----- TCP-заголовок -----
-            packet.putShort(dstPort.toShort()) // Source port (серверный)
-            packet.putShort(srcPort.toShort()) // Dest port (клиентский)
+            // TCP-заголовок
+            packet.putShort(dstPort.toShort())                  // Source port (серверный)
+            packet.putShort(srcPort.toShort())                  // Dest port (клиентский)
             packet.putInt(serverSeq)
             packet.putInt(clientAck)
             val flags = 0x10 // ACK
-            val tcpHeaderLenWord = 5 // 20 байт
-            packet.putShort(((tcpHeaderLenWord shl 12) or flags).toShort())
-            packet.putShort(65535) // Window
-            packet.putShort(0) // Checksum (пока 0)
-            packet.putShort(0) // Urgent
+            packet.putShort(((5 shl 12) or flags).toShort())   // TCP header length + flags
+            packet.putShort(65535)                              // Window
+            packet.putShort(0)                                  // checksum placeholder
+            packet.putShort(0)                                  // Urgent
 
-            // ----- Данные -----
+            // Данные
             packet.put(data)
 
-            // ----- Расчет контрольных сумм -----
             val packetArray = packet.array()
+
             // IP checksum
             val ipChecksum = calculateChecksum(packetArray, 0, ipLen)
             packetArray[10] = (ipChecksum shr 8).toByte()
             packetArray[11] = (ipChecksum and 0xFF).toByte()
 
-            // TCP checksum (псевдозаголовок)
+            // TCP pseudo-header checksum
             val pseudoHeader = ByteBuffer.allocate(12 + tcpLen + data.size)
             pseudoHeader.order(ByteOrder.BIG_ENDIAN)
-            pseudoHeader.putInt(dstIp) // Source IP
-            pseudoHeader.putInt(srcIp) // Dest IP
+            pseudoHeader.putInt(dstIp)
+            pseudoHeader.putInt(srcIp)
             pseudoHeader.put(0)
-            pseudoHeader.put(6) // Protocol
+            pseudoHeader.put(6)
             pseudoHeader.putShort((tcpLen + data.size).toShort())
-            // Копируем TCP-заголовок и данные (без IP-заголовка)
             pseudoHeader.put(packetArray, ipLen, tcpLen + data.size)
             val tcpChecksum = calculateChecksum(pseudoHeader.array(), 0, pseudoHeader.position())
-            // Записываем контрольную сумму TCP
-            val tcpOffset = ipLen + 16 // смещение до поля checksum в TCP (16 байт от начала TCP)
+            val tcpOffset = ipLen + 16
             packetArray[tcpOffset] = (tcpChecksum shr 8).toByte()
             packetArray[tcpOffset + 1] = (tcpChecksum and 0xFF).toByte()
 
-            // Отправка в интерфейс
             try {
                 outputStream.write(packetArray)
                 outputStream.flush()
@@ -314,17 +296,12 @@ class VpnService : VpnService() {
             }
         }
 
-        // Отправка данных на сервер (с фрагментацией)
         fun sendToServer(data: ByteArray) {
             if (!connected) return
             try {
-                // Определяем тип данных
-                if (!isTls && data.size > 0 && data[0].toInt() == 0x16) {
-                    isTls = true // TLS ClientHello
+                if (!isTls && data.isNotEmpty() && data[0].toInt() == 0x16) {
+                    isTls = true
                 }
-
-                // Применяем фрагментацию:
-                // Для HTTP и TLS разбиваем на части по 100 байт с задержкой 10 мс
                 val shouldFragment = isTls || isHttp(data)
                 if (shouldFragment) {
                     val chunkSize = 100
@@ -372,12 +349,10 @@ class VpnService : VpnService() {
         }
     }
 
-    // -------------------- Вспомогательные функции --------------------
     private fun intToBytes(value: Int): ByteArray {
         return ByteBuffer.allocate(4).putInt(value).array()
     }
 
-    // Расчет контрольной суммы (IP, TCP)
     private fun calculateChecksum(data: ByteArray, offset: Int, length: Int): Int {
         var sum = 0
         var i = offset
@@ -394,7 +369,6 @@ class VpnService : VpnService() {
         return sum.inv() and 0xFFFF
     }
 
-    // -------------------- Уведомления --------------------
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
