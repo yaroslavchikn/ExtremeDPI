@@ -37,9 +37,11 @@ class VpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        Log.d(TAG, "VpnService created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand called")
         startForeground(NOTIFICATION_ID, createNotification())
         running.set(true)
         startVpn()
@@ -47,6 +49,7 @@ class VpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        Log.d(TAG, "onDestroy called")
         running.set(false)
         stopVpn()
         scope.cancel()
@@ -55,6 +58,7 @@ class VpnService : VpnService() {
 
     private fun startVpn() {
         try {
+            Log.d(TAG, "Starting VPN interface")
             val builder = Builder()
             builder.setSession("ByeDPI WiFi")
             builder.addAddress("10.0.0.2", 32)
@@ -63,8 +67,11 @@ class VpnService : VpnService() {
             builder.addRoute("0.0.0.0", 0)
             builder.setMtu(1500)
             vpnInterface = builder.establish()
-            Log.d(TAG, "VPN интерфейс создан")
-
+            if (vpnInterface == null) {
+                Log.e(TAG, "VPN interface is null")
+                return
+            }
+            Log.d(TAG, "VPN интерфейс создан успешно")
             scope.launch {
                 readPackets()
             }
@@ -74,6 +81,7 @@ class VpnService : VpnService() {
     }
 
     private fun stopVpn() {
+        Log.d(TAG, "Stopping VPN")
         vpnInterface?.close()
         vpnInterface = null
         connections.values.forEach { it.close() }
@@ -82,7 +90,11 @@ class VpnService : VpnService() {
     }
 
     private suspend fun readPackets() {
-        val fd = vpnInterface?.fileDescriptor ?: return
+        val fd = vpnInterface?.fileDescriptor
+        if (fd == null) {
+            Log.e(TAG, "File descriptor is null, cannot read packets")
+            return
+        }
         val inputStream = FileInputStream(fd)
         val outputStream = FileOutputStream(fd)
         val buffer = ByteBuffer.allocate(65536)
@@ -92,7 +104,10 @@ class VpnService : VpnService() {
             try {
                 buffer.clear()
                 val len = inputStream.channel.read(buffer)
-                if (len <= 0) continue
+                if (len <= 0) {
+                    delay(10)
+                    continue
+                }
                 buffer.flip()
                 val packetData = ByteArray(len)
                 buffer.get(packetData)
@@ -101,6 +116,7 @@ class VpnService : VpnService() {
                 if (running.get()) Log.e(TAG, "Ошибка чтения: ${e.message}")
             }
         }
+        Log.d(TAG, "readPackets finished")
     }
 
     private fun processPacket(packetData: ByteArray, outputStream: FileOutputStream) {
@@ -170,13 +186,12 @@ class VpnService : VpnService() {
                 buffer.get(data)
                 conn.sendToServer(data)
             } else {
-                Log.d(TAG, "Данные от сервера или потерянное соединение")
+                Log.d(TAG, "Данные для неизвестного соединения, игнорируем")
             }
         }
     }
 
     private fun handleUdp(packetData: ByteArray, ipHeaderLen: Int, srcIp: Int, dstIp: Int, outputStream: FileOutputStream) {
-        // UDP не обрабатывается для простоты
         Log.d(TAG, "UDP пакет получен, пропущен")
     }
 
@@ -249,7 +264,7 @@ class VpnService : VpnService() {
             packet.putShort(0x4000.toShort())
             packet.put(64)
             packet.put(6)
-            packet.putShort(0.toShort())
+            packet.putShort(0)
             packet.putInt(dstIp)
             packet.putInt(srcIp)
 
@@ -260,11 +275,10 @@ class VpnService : VpnService() {
             packet.putInt(clientAck)
             val flags = 0x10 // ACK
             packet.putShort(((5 shl 12) or flags).toShort())
-            packet.putShort(65535.toShort())
-            packet.putShort(0.toShort())
-            packet.putShort(0.toShort())
+            packet.putShort(65535)
+            packet.putShort(0)
+            packet.putShort(0)
 
-            // Данные
             packet.put(data)
 
             val packetArray = packet.array()
