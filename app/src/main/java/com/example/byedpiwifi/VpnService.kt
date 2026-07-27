@@ -306,25 +306,25 @@ class VpnService : VpnService() {
             // IP-заголовок
             packet.put(0x45)
             packet.put(0x00)
-            packet.putShort(totalLen.toShort())                   // total length
-            packet.putShort(0x1234.toShort())                     // ID
-            packet.putShort(0x4000.toShort())                     // Flags (DF)
-            packet.put(64)                                        // TTL
-            packet.put(6)                                         // Protocol TCP
-            packet.putShort(0)                                    // checksum placeholder
-            packet.putInt(dstIp)                                  // Source IP (обратный)
-            packet.putInt(srcIp)                                  // Destination IP
+            packet.putShort(totalLen.toShort())
+            packet.putShort(0x1234.toShort())
+            packet.putShort(0x4000.toShort())
+            packet.put(64)
+            packet.put(6)
+            packet.putShort(0)
+            packet.putInt(dstIp)
+            packet.putInt(srcIp)
 
             // TCP-заголовок
-            packet.putShort(dstPort.toShort())                    // Source port (серверный)
-            packet.putShort(srcPort.toShort())                    // Dest port (клиентский)
+            packet.putShort(dstPort.toShort())
+            packet.putShort(srcPort.toShort())
             packet.putInt(serverSeq)
             packet.putInt(clientAck)
             val flags = 0x10 // ACK
-            packet.putShort(((5 shl 12) or flags).toShort())      // TCP header length + flags
-            packet.putShort(65535)                                // Window
-            packet.putShort(0)                                    // checksum placeholder
-            packet.putShort(0)                                    // Urgent
+            packet.putShort(((5 shl 12) or flags).toShort())
+            packet.putShort((-1).toShort())  // ← ПРАВИЛЬНОЕ ЗНАЧЕНИЕ ДЛЯ 65535!
+            packet.putShort(0)
+            packet.putShort(0)
 
             // Данные
             packet.put(data)
