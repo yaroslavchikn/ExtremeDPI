@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 class MainActivity : AppCompatActivity() {
 
     private lateinit var toggleButton: Button
+    private var isVpnRunning = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -18,13 +19,25 @@ class MainActivity : AppCompatActivity() {
         toggleButton = findViewById(R.id.btn_toggle)
 
         toggleButton.setOnClickListener {
-            val intent = Intent(this, VpnService::class.java)
-            val prepare = VpnService.prepare(this)
-            if (prepare != null) {
-                startActivityForResult(prepare, 1)
+            if (isVpnRunning) {
+                // Остановить VPN
+                val intent = Intent(this, VpnService::class.java)
+                stopService(intent)
+                isVpnRunning = false
+                toggleButton.text = "Запустить VPN"
+                Toast.makeText(this, "VPN остановлен", Toast.LENGTH_SHORT).show()
             } else {
-                startService(intent)
-                Toast.makeText(this, "VPN запущен", Toast.LENGTH_SHORT).show()
+                // Запустить VPN
+                val intent = Intent(this, VpnService::class.java)
+                val prepare = VpnService.prepare(this)
+                if (prepare != null) {
+                    startActivityForResult(prepare, 1)
+                } else {
+                    startService(intent)
+                    isVpnRunning = true
+                    toggleButton.text = "Остановить VPN"
+                    Toast.makeText(this, "VPN запущен", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -34,6 +47,8 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == 1 && resultCode == RESULT_OK) {
             val intent = Intent(this, VpnService::class.java)
             startService(intent)
+            isVpnRunning = true
+            toggleButton.text = "Остановить VPN"
             Toast.makeText(this, "VPN запущен", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "Разрешение VPN не получено", Toast.LENGTH_SHORT).show()
