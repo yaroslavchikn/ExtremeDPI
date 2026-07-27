@@ -199,6 +199,53 @@ class VpnService : VpnService() {
         return ((packet[2].toInt() and 0xFF) shl 8) or (packet[3].toInt() and 0xFF)
     }
 
+    private fun intToBytes(value: Int): ByteArray {
+        return ByteBuffer.allocate(4).putInt(value).array()
+    }
+
+    private fun calculateChecksum(data: ByteArray, offset: Int, length: Int): Int {
+        var sum = 0
+        var i = offset
+        while (i < offset + length - 1) {
+            sum += ((data[i].toInt() and 0xFF) shl 8) or (data[i + 1].toInt() and 0xFF)
+            i += 2
+        }
+        if (i < offset + length) {
+            sum += (data[i].toInt() and 0xFF) shl 8
+        }
+        while (sum shr 16 > 0) {
+            sum = (sum and 0xFFFF) + (sum shr 16)
+        }
+        return sum.inv() and 0xFFFF
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "VPN Service",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(): Notification {
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("ByeDPI WiFi")
+            .setContentText("VPN активен")
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentIntent(pendingIntent)
+            .build()
+    }
+
+    // ==================== ВНУТРЕННИЙ КЛАСС CONNECTION ====================
     inner class Connection(
         val srcIp: Int, val srcPort: Int,
         val dstIp: Int, val dstPort: Int,
@@ -361,51 +408,5 @@ class VpnService : VpnService() {
             connected = false
             connections.remove("$srcIp:$srcPort->$dstIp:$dstPort")
         }
-    }
-
-    private fun intToBytes(value: Int): ByteArray {
-        return ByteBuffer.allocate(4).putInt(value).array()
-    }
-
-    private fun calculateChecksum(data: ByteArray, offset: Int, length: Int): Int {
-        var sum = 0
-        var i = offset
-        while (i < offset + length - 1) {
-            sum += ((data[i].toInt() and 0xFF) shl 8) or (data[i + 1].toInt() and 0xFF)
-            i += 2
-        }
-        if (i < offset + length) {
-            sum += (data[i].toInt() and 0xFF) shl 8
-        }
-        while (sum shr 16 > 0) {
-            sum = (sum and 0xFFFF) + (sum shr 16)
-        }
-        return sum.inv() and 0xFFFF
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "VPN Service",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun createNotification(): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ByeDPI WiFi")
-            .setContentText("VPN активен")
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setContentIntent(pendingIntent)
-            .build()
     }
 }
